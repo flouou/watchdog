@@ -17,18 +17,33 @@ var width = flag.Uint("width", 1000, "Desired width of the derivate")
 var height = flag.Uint("height", 1000, "Height of the desired derivate")
 var destination = flag.String("destination", "", "Destination directory for the created derivates")
 var pathSeparator = fmt.Sprintf("%c", os.PathSeparator)
+var logDir = "logs"
+var logFile = logDir + "/converter.log"
 
 func main() {
 	flag.Parse()
 
-	err := filepath.Walk(*source, findFiles)
+	if _, err := os.Stat(logDir); os.IsNotExist(err) {
+		err := os.MkdirAll(logDir, os.ModePerm)
+		if err != nil {
+			log.Fatalf("Could not create log directory\n")
+		}
+	}
+	f, err := os.OpenFile(logFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
-		fmt.Printf("Error while walking: %v\n", err)
+		log.Fatalf("Could not start logger\n")
+	}
+	defer f.Close()
+
+	log.SetOutput(f)
+
+	walkErr := filepath.Walk(*source, findFiles)
+	if walkErr != nil {
+		log.Fatalf("Error while walking: %v\n", err)
 	}
 }
 
 func findFiles(path string, fi os.FileInfo, err error) error {
-	//fmt.Printf("Converted: %s\n", path)
 	switch mode := fi.Mode(); {
 	case mode.IsDir():
 	case mode.IsRegular():
@@ -39,22 +54,18 @@ func findFiles(path string, fi os.FileInfo, err error) error {
 }
 
 //converts the image
-func convert(path string) error {
+func convert(path string) {
 	file, err := os.Open(path)
 	if err != nil {
-		return err
+		log.Panicln(err)
 	}
-	//fmt.Printf("Found a file: %s\n", file.Name())
-	//fmt.Println(canConvert(*file))
+
 	convertible, extension := canConvert(*file)
 	if convertible {
-		fmt.Printf("Converting %s\n", extension)
-		fmt.Println(file.Name())
+		log.Printf("Converting %s -> %s\n", extension, file.Name())
 		image, _, err := image.Decode(file)
 		if err != nil {
-			fmt.Println("error occurs here")
-			log.Fatal(err)
-			return err
+			log.Panicln(err)
 		}
 		file.Close()
 
@@ -62,12 +73,11 @@ func convert(path string) error {
 
 		saveErr := saveImage(thumbnailImage, file.Name())
 		if saveErr != nil {
-			return saveErr
+			log.Panic(err)
 		}
 	} else {
-		fmt.Printf("Conversion not doable for type %s\n", extension)
+		log.Printf("Conversion not doable for type %s -> %s\n", extension, file.Name())
 	}
-	return nil
 }
 
 //checks, if the file is even convertible by filetype
@@ -87,15 +97,14 @@ func saveImage(img image.Image, sourcePath string) error {
 	destinationFile := destination + pathSeparator + baseName
 	out, err := os.Create(destinationFile)
 	if err != nil {
-		fmt.Println("error occurs here")
-		log.Fatal(err)
+		log.Panicln(err)
 		return err
 	}
 	defer out.Close()
 	encErr := png.Encode(out, img)
 	if encErr != nil {
 		out.Close()
-		log.Fatal(encErr)
+		log.Panicln(encErr)
 	}
 	return nil
 }
