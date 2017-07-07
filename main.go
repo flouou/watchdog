@@ -3,18 +3,25 @@ package main
 import (
 	"flag"
 	"fmt"
+	"image"
+	"log"
 	"os"
 	"path/filepath"
+
+	"path"
+
+	"github.com/nfnt/resize"
 )
 
-var root = flag.String("root", "", "Directory containing the original images")
-var width = flag.Int64("width", 0, "Desired width of the derivate")
-var height = flag.Int64("height", 0, "Height of the desired derivate")
+var source = flag.String("source", "", "Directory containing the original images")
+var width = flag.Uint("width", 1000, "Desired width of the derivate")
+var height = flag.Uint("height", 1000, "Height of the desired derivate")
+var destination = flag.String("destination", "", "Destination directory for the created derivates")
 
 func main() {
 	flag.Parse()
 
-	err := filepath.Walk(*root, findFiles)
+	err := filepath.Walk(*source, findFiles)
 	if err != nil {
 		fmt.Printf("Error while walking: %v\n", err)
 	}
@@ -25,14 +32,14 @@ func findFiles(path string, fi os.FileInfo, err error) error {
 	switch mode := fi.Mode(); {
 	case mode.IsDir():
 	case mode.IsRegular():
-		resize(path)
+		convert(path)
 	}
 
 	return nil
 }
 
 //converts the image
-func resize(path string) error {
+func convert(path string) error {
 	file, err := os.Open(path)
 	if err != nil {
 		return err
@@ -42,8 +49,22 @@ func resize(path string) error {
 	convertible, extension := canConvert(*file)
 	if convertible {
 		fmt.Printf("Converting %s\n", extension)
+		fmt.Print(file)
+		image, _, err := image.Decode(file)
+		if err != nil {
+			log.Fatal(err)
+			return err
+		}
+		file.Close()
+
+		thumbnailImage := resize.Thumbnail(*width, *height, image, resize.Lanczos3)
+
+		saveErr := saveImage(thumbnailImage, file.Name())
+		if saveErr != nil {
+			return saveErr
+		}
 	} else {
-		fmt.Printf("Conversion not doable: %s\n", extension)
+		fmt.Printf("Conversion not doable for type %s\n", extension)
 	}
 	return nil
 }
@@ -53,8 +74,27 @@ func canConvert(file os.File) (bool, string) {
 	extension := filepath.Ext(file.Name())
 
 	if extension == ".jpg" || extension == ".gif" || extension == ".png" {
-		//fmt.Printf("%s is a %s", file.Name(), extension)
 		return true, extension
 	}
 	return false, extension
+}
+
+func saveImage(img image.Image, sourcePath string) error {
+	baseName := path.Base(sourcePath)
+	destination := *destination
+	createPath(destination)
+	destinationFile := destination + baseName
+	fmt.Printf("something even stranger")
+	out, err := os.Create(destinationFile)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	//png.Encode(out, img, nil)
+	return nil
+}
+
+func createPath(path string) {
+	fmt.Printf("something strange")
+	_ = os.MkdirAll(path, os.ModePerm)
 }
