@@ -4,11 +4,10 @@ import (
 	"flag"
 	"fmt"
 	"image"
+	"image/png"
 	"log"
 	"os"
 	"path/filepath"
-
-	"path"
 
 	"github.com/nfnt/resize"
 )
@@ -17,6 +16,7 @@ var source = flag.String("source", "", "Directory containing the original images
 var width = flag.Uint("width", 1000, "Desired width of the derivate")
 var height = flag.Uint("height", 1000, "Height of the desired derivate")
 var destination = flag.String("destination", "", "Destination directory for the created derivates")
+var pathSeparator = fmt.Sprintf("%c", os.PathSeparator)
 
 func main() {
 	flag.Parse()
@@ -49,9 +49,10 @@ func convert(path string) error {
 	convertible, extension := canConvert(*file)
 	if convertible {
 		fmt.Printf("Converting %s\n", extension)
-		fmt.Print(file)
+		fmt.Println(file.Name())
 		image, _, err := image.Decode(file)
 		if err != nil {
+			fmt.Println("error occurs here")
 			log.Fatal(err)
 			return err
 		}
@@ -80,21 +81,25 @@ func canConvert(file os.File) (bool, string) {
 }
 
 func saveImage(img image.Image, sourcePath string) error {
-	baseName := path.Base(sourcePath)
+	baseName := filepath.Base(sourcePath)
 	destination := *destination
 	createPath(destination)
-	destinationFile := destination + baseName
-	fmt.Printf("something even stranger")
+	destinationFile := destination + pathSeparator + baseName
 	out, err := os.Create(destinationFile)
 	if err != nil {
+		fmt.Println("error occurs here")
+		log.Fatal(err)
 		return err
 	}
 	defer out.Close()
-	//png.Encode(out, img, nil)
+	encErr := png.Encode(out, img)
+	if encErr != nil {
+		out.Close()
+		log.Fatal(encErr)
+	}
 	return nil
 }
 
 func createPath(path string) {
-	fmt.Printf("something strange")
 	_ = os.MkdirAll(path, os.ModePerm)
 }
