@@ -29,11 +29,21 @@ func main() {
 	flag.Parse()
 
 	if *source == "" {
-		log.Fatalf("You have to define a source directory")
+		log.Fatalf("You have to define a source directory\n")
 	}
 	if *destination == "" {
-		*destination = *source + "_derivates"
-		log.Printf("No destination directory given. Using default destination: %s_derivates", *source)
+
+		fi, err := os.Stat(*source)
+		if err != nil {
+			log.Fatalf("Could not scan source directory\n")
+		}
+		switch mode := fi.Mode(); {
+		case mode.IsDir():
+			*destination = *source + "_derivates"
+		case mode.IsRegular():
+			*destination = filepath.Dir(*source) + "_derivates"
+		}
+		log.Printf("No destination directory given. Using default destination: %s\n", *destination)
 	}
 
 	if _, err := os.Stat(logDir); os.IsNotExist(err) {
@@ -60,17 +70,21 @@ func findFiles(path string, fi os.FileInfo, err error) error {
 	switch mode := fi.Mode(); {
 	case mode.IsDir():
 	case mode.IsRegular():
-		convert(path)
+		err := convert(path)
+		if err != nil {
+			log.Panicf("Error while converting the file: %s -> %s\n", err, path)
+			return err
+		}
 	}
 
 	return nil
 }
 
 //converts the image
-func convert(path string) {
+func convert(path string) error {
 	file, err := os.OpenFile(path, os.O_RDWR, os.ModePerm)
 	if err != nil {
-		log.Panicf("Error while opening file: %s -> %s", err, path)
+		log.Panicf("Error while opening file: %s -> %s\n", err, path)
 	}
 
 	convertible, extension := canConvert(*file)
@@ -78,8 +92,8 @@ func convert(path string) {
 		log.Printf("Converting %s -> %s\n", extension, file.Name())
 		image, _, err := image.Decode(file)
 		if err != nil {
-			log.Printf("Error while decoding file: %s -> Did not decode %s", err, file.Name())
-			return
+			log.Printf("Error while decoding file: %s -> Did not decode %s\n", err, file.Name())
+			return err
 		}
 		file.Close()
 
@@ -87,12 +101,14 @@ func convert(path string) {
 
 		saveErr := saveImage(thumbnailImage, file.Name(), extension)
 		if saveErr != nil {
-			log.Panicf("Error while saving file: %s -> Did not save %s", saveErr, file.Name())
+			log.Panicf("Error while saving file: %s -> Did not save %s\n", saveErr, file.Name())
+			return err
 		}
 	} else {
 		file.Close()
 		log.Printf("Conversion not doable for type %s -> %s\n", extension, file.Name())
 	}
+	return nil
 }
 
 //checks, if the file is even convertible by filetype
