@@ -29,13 +29,13 @@ func main() {
 	flag.Parse()
 
 	if *source == "" {
-		log.Fatalf("You have to define a source directory\n")
+		log.Fatalf("WARN You have to define a source directory\n")
 	}
 	if *destination == "" {
 
 		fi, err := os.Stat(*source)
 		if err != nil {
-			log.Fatalf("Could not scan source directory\n")
+			log.Fatalf("ERROR Could not scan source directory\n")
 		}
 		switch mode := fi.Mode(); {
 		case mode.IsDir():
@@ -43,18 +43,18 @@ func main() {
 		case mode.IsRegular():
 			*destination = filepath.Dir(*source) + "_derivates"
 		}
-		log.Printf("No destination directory given. Using default destination: %s\n", *destination)
+		log.Printf("INFO No destination directory given. Using default destination: %s\n", *destination)
 	}
 
 	if _, err := os.Stat(logDir); os.IsNotExist(err) {
 		err := os.MkdirAll(logDir, os.ModePerm)
 		if err != nil {
-			log.Fatalf("Could not create log directory %s\n", logDir)
+			log.Fatalf("ERROR Could not create log directory %s\n", logDir)
 		}
 	}
 	f, err := os.OpenFile(logFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
-		log.Fatalf("Could not start logger: %s\n", err)
+		log.Fatalf("ERROR Could not start logger: %s\n", err)
 	}
 	defer f.Close()
 
@@ -62,7 +62,7 @@ func main() {
 
 	walkErr := filepath.Walk(*source, findFiles)
 	if walkErr != nil {
-		log.Fatalf("Error while walking: %sv\n", err)
+		log.Fatalf("ERROR Error while walking: %sv\n", err)
 	}
 }
 
@@ -72,8 +72,8 @@ func findFiles(path string, fi os.FileInfo, err error) error {
 	case mode.IsRegular():
 		err := convert(path)
 		if err != nil {
-			log.Panicf("Error while converting the file: %s -> %s\n", err, path)
-			return err
+			log.Printf("ERROR Error while converting the file: %s -> %s\n", err, path)
+			return nil
 		}
 	}
 
@@ -84,15 +84,15 @@ func findFiles(path string, fi os.FileInfo, err error) error {
 func convert(path string) error {
 	file, err := os.OpenFile(path, os.O_RDWR, os.ModePerm)
 	if err != nil {
-		log.Panicf("Error while opening file: %s -> %s\n", err, path)
+		log.Panicf("ERROR Error while opening file: %s -> %s\n", err, path)
 	}
 
 	convertible, extension := canConvert(*file)
 	if convertible {
-		log.Printf("Converting %s -> %s\n", extension, file.Name())
+		log.Printf("INFO Converting %s -> %s\n", extension, file.Name())
 		image, _, err := image.Decode(file)
 		if err != nil {
-			log.Printf("Error while decoding file: %s -> Did not decode %s\n", err, file.Name())
+			log.Printf("ERROR Error while decoding file: %s -> Did not decode %s\n", err, file.Name())
 			return err
 		}
 		file.Close()
@@ -101,12 +101,12 @@ func convert(path string) error {
 
 		saveErr := saveImage(thumbnailImage, file.Name(), extension)
 		if saveErr != nil {
-			log.Panicf("Error while saving file: %s -> Did not save %s\n", saveErr, file.Name())
+			log.Panicf("WARN Error while saving file: %s -> Did not save %s\n", saveErr, file.Name())
 			return err
 		}
 	} else {
 		file.Close()
-		log.Printf("Conversion not doable for type %s -> %s\n", extension, file.Name())
+		log.Printf("WARN Conversion not doable for type %s -> %s\n", extension, file.Name())
 	}
 	return nil
 }
@@ -128,7 +128,7 @@ func saveImage(img image.Image, sourcePath, extension string) error {
 	destinationFile := filepath.Join(destination, baseName)
 	out, err := os.Create(destinationFile)
 	if err != nil {
-		log.Panicf("Error while creating destination file: %s", destinationFile)
+		log.Panicf("EROR Error while creating destination file: %s", destinationFile)
 		return err
 	}
 	defer out.Close()
@@ -138,21 +138,21 @@ func saveImage(img image.Image, sourcePath, extension string) error {
 		encErr := png.Encode(out, img)
 		if encErr != nil {
 			out.Close()
-			log.Panicf("Error while encoding file: %s -> %s", encErr, out.Name())
+			log.Panicf("ERROR Error while encoding file: %s -> %s", encErr, out.Name())
 			return encErr
 		}
 	case ".jpg":
 		encErr := jpeg.Encode(out, img, nil)
 		if encErr != nil {
 			out.Close()
-			log.Panicf("Error while encoding file: %s -> %s", encErr, out.Name())
+			log.Panicf("ERROR Error while encoding file: %s -> %s", encErr, out.Name())
 			return encErr
 		}
 	case ".gif":
 		encErr := gif.Encode(out, img, nil)
 		if encErr != nil {
 			out.Close()
-			log.Panicf("Error while encoding file: %s -> %s", encErr, out.Name())
+			log.Panicf("ERROR Error while encoding file: %s -> %s", encErr, out.Name())
 			return encErr
 		}
 	}
