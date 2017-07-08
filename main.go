@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"image/gif"
+
 	"github.com/flouou/watchdog/config"
 	"github.com/nfnt/resize"
 )
@@ -19,10 +21,9 @@ var configuration = config.LoadConfig("config.json")
 var source = flag.String("source", "", "Directory containing the original images")
 var width = flag.Uint("width", 150, "Desired width of the derivate")
 var height = flag.Uint("height", 150, "Height of the desired derivate")
-var destination = flag.String("destination", "", "Destination directory for the created derivates")
-var pathSeparator = string(filepath.Separator)
+var destination = flag.String("destination", "", "Destination directory for the created derivates (default {source}_derivates)")
 var logDir = configuration.LogDir
-var logFile = logDir + pathSeparator + configuration.LogFile
+var logFile = filepath.Join(logDir, configuration.LogFile)
 
 func main() {
 	flag.Parse()
@@ -43,7 +44,7 @@ func main() {
 	}
 	f, err := os.OpenFile(logFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
-		log.Fatalf("Could not start logger\n")
+		log.Fatalf("Could not start logger: %s\n", err)
 	}
 	defer f.Close()
 
@@ -51,7 +52,7 @@ func main() {
 
 	walkErr := filepath.Walk(*source, findFiles)
 	if walkErr != nil {
-		log.Fatalf("Error while walking: %v\n", err)
+		log.Fatalf("Error while walking: %sv\n", err)
 	}
 }
 
@@ -69,7 +70,7 @@ func findFiles(path string, fi os.FileInfo, err error) error {
 func convert(path string) {
 	file, err := os.OpenFile(path, os.O_RDWR, os.ModePerm)
 	if err != nil {
-		log.Panicf("Error while opening file: %s", err)
+		log.Panicf("Error while opening file: %s -> %s", err, path)
 	}
 
 	convertible, extension := canConvert(*file)
@@ -77,7 +78,7 @@ func convert(path string) {
 		log.Printf("Converting %s -> %s\n", extension, file.Name())
 		image, _, err := image.Decode(file)
 		if err != nil {
-			log.Printf("Error while decoding file: %s -> Did not decode", err)
+			log.Printf("Error while decoding file: %s -> Did not decode %s", err, file.Name())
 			return
 		}
 		file.Close()
@@ -86,7 +87,7 @@ func convert(path string) {
 
 		saveErr := saveImage(thumbnailImage, file.Name(), extension)
 		if saveErr != nil {
-			log.Panicf("Error while saving file: %s", saveErr)
+			log.Panicf("Error while saving file: %s -> Did not save %s", saveErr, file.Name())
 		}
 	} else {
 		file.Close()
@@ -108,7 +109,7 @@ func saveImage(img image.Image, sourcePath, extension string) error {
 	baseName := filepath.Base(sourcePath)
 	destination := *destination
 	createPath(destination)
-	destinationFile := destination + pathSeparator + baseName
+	destinationFile := filepath.Join(destination, baseName)
 	out, err := os.Create(destinationFile)
 	if err != nil {
 		log.Panicf("Error while creating destination file: %s", destinationFile)
@@ -121,13 +122,22 @@ func saveImage(img image.Image, sourcePath, extension string) error {
 		encErr := png.Encode(out, img)
 		if encErr != nil {
 			out.Close()
-			log.Panicf("Error while encoding file: %s", encErr)
+			log.Panicf("Error while encoding file: %s -> %s", encErr, out.Name())
+			return encErr
 		}
 	case ".jpg":
 		encErr := jpeg.Encode(out, img, nil)
 		if encErr != nil {
 			out.Close()
-			log.Panicf("Error while encoding file: %s", encErr)
+			log.Panicf("Error while encoding file: %s -> %s", encErr, out.Name())
+			return encErr
+		}
+	case ".gif":
+		encErr := gif.Encode(out, img, nil)
+		if encErr != nil {
+			out.Close()
+			log.Panicf("Error while encoding file: %s -> %s", encErr, out.Name())
+			return encErr
 		}
 	}
 	return nil
