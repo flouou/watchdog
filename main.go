@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"image"
+	"image/jpeg"
 	"image/png"
 	"log"
 	"os"
@@ -76,13 +77,14 @@ func convert(path string) {
 		log.Printf("Converting %s -> %s\n", extension, file.Name())
 		image, _, err := image.Decode(file)
 		if err != nil {
-			log.Panicf("Error while decoding file: %s", err)
+			log.Printf("Error while decoding file: %s -> Did not decode", err)
+			return
 		}
 		file.Close()
 
 		thumbnailImage := resize.Thumbnail(*width, *height, image, resize.Lanczos3)
 
-		saveErr := saveImage(thumbnailImage, file.Name())
+		saveErr := saveImage(thumbnailImage, file.Name(), extension)
 		if saveErr != nil {
 			log.Panicf("Error while saving file: %s", saveErr)
 		}
@@ -102,7 +104,7 @@ func canConvert(file os.File) (bool, string) {
 	return false, extension
 }
 
-func saveImage(img image.Image, sourcePath string) error {
+func saveImage(img image.Image, sourcePath, extension string) error {
 	baseName := filepath.Base(sourcePath)
 	destination := *destination
 	createPath(destination)
@@ -113,10 +115,20 @@ func saveImage(img image.Image, sourcePath string) error {
 		return err
 	}
 	defer out.Close()
-	encErr := png.Encode(out, img)
-	if encErr != nil {
-		out.Close()
-		log.Panicf("Error while encoding file: %s", encErr)
+
+	switch extension {
+	case ".png":
+		encErr := png.Encode(out, img)
+		if encErr != nil {
+			out.Close()
+			log.Panicf("Error while encoding file: %s", encErr)
+		}
+	case ".jpg":
+		encErr := jpeg.Encode(out, img, nil)
+		if encErr != nil {
+			out.Close()
+			log.Panicf("Error while encoding file: %s", encErr)
+		}
 	}
 	return nil
 }
