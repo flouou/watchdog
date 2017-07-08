@@ -8,43 +8,31 @@ import (
 	"os"
 	"path/filepath"
 
-	"encoding/json"
-
+	"github.com/flouou/watchdog/config"
 	"github.com/nfnt/resize"
 )
 
 //Configuration resembles every configuration made in config.json
-type Configuration struct {
-	LogDir  string
-	LogFile string
-}
 
-var configuration = loadConfig("config.json")
+var configuration = config.LoadConfig("config.json")
 var source = flag.String("source", "", "Directory containing the original images")
-var width = flag.Uint("width", 1000, "Desired width of the derivate")
-var height = flag.Uint("height", 1000, "Height of the desired derivate")
+var width = flag.Uint("width", 150, "Desired width of the derivate")
+var height = flag.Uint("height", 150, "Height of the desired derivate")
 var destination = flag.String("destination", "", "Destination directory for the created derivates")
 var pathSeparator = string(filepath.Separator)
 var logDir = configuration.LogDir
 var logFile = logDir + pathSeparator + configuration.LogFile
 
-func loadConfig(configFile string) *Configuration {
-	file, err := os.Open(configFile)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	decoder := json.NewDecoder(file)
-	configuration := Configuration{}
-	decodingErr := decoder.Decode(&configuration)
-	if decodingErr != nil {
-		log.Fatalln(decodingErr)
-	}
-	log.Printf("logDir: %s\n", configuration.LogDir)
-	return &configuration
-}
-
 func main() {
 	flag.Parse()
+
+	if *source == "" {
+		log.Fatalf("You have to define a source directory")
+	}
+	if *destination == "" {
+		*destination = *source + "_derivates"
+		log.Printf("No destination directory given. Using default destination: %s_derivates", *source)
+	}
 
 	if _, err := os.Stat(logDir); os.IsNotExist(err) {
 		err := os.MkdirAll(logDir, os.ModePerm)
@@ -78,9 +66,9 @@ func findFiles(path string, fi os.FileInfo, err error) error {
 
 //converts the image
 func convert(path string) {
-	file, err := os.Open(path)
+	file, err := os.OpenFile(path, os.O_RDWR, os.ModePerm)
 	if err != nil {
-		log.Panicln(err)
+		log.Panicf("Error while opening file: %s", err)
 	}
 
 	convertible, extension := canConvert(*file)
@@ -88,7 +76,7 @@ func convert(path string) {
 		log.Printf("Converting %s -> %s\n", extension, file.Name())
 		image, _, err := image.Decode(file)
 		if err != nil {
-			log.Panicln(err)
+			log.Panicf("Error while decoding file: %s", err)
 		}
 		file.Close()
 
@@ -96,9 +84,10 @@ func convert(path string) {
 
 		saveErr := saveImage(thumbnailImage, file.Name())
 		if saveErr != nil {
-			log.Panic(err)
+			log.Panicf("Error while saving file: %s", saveErr)
 		}
 	} else {
+		file.Close()
 		log.Printf("Conversion not doable for type %s -> %s\n", extension, file.Name())
 	}
 }
@@ -120,14 +109,14 @@ func saveImage(img image.Image, sourcePath string) error {
 	destinationFile := destination + pathSeparator + baseName
 	out, err := os.Create(destinationFile)
 	if err != nil {
-		log.Panicln(err)
+		log.Panicf("Error while creating destination file: %s", destinationFile)
 		return err
 	}
 	defer out.Close()
 	encErr := png.Encode(out, img)
 	if encErr != nil {
 		out.Close()
-		log.Panicln(encErr)
+		log.Panicf("Error while encoding file: %s", encErr)
 	}
 	return nil
 }
