@@ -2,23 +2,46 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"image"
 	"image/png"
 	"log"
 	"os"
 	"path/filepath"
 
+	"encoding/json"
+
 	"github.com/nfnt/resize"
 )
 
+//Configuration resembles every configuration made in config.json
+type Configuration struct {
+	LogDir  string
+	LogFile string
+}
+
+var configuration = loadConfig("config.json")
 var source = flag.String("source", "", "Directory containing the original images")
 var width = flag.Uint("width", 1000, "Desired width of the derivate")
 var height = flag.Uint("height", 1000, "Height of the desired derivate")
 var destination = flag.String("destination", "", "Destination directory for the created derivates")
-var pathSeparator = fmt.Sprintf("%c", os.PathSeparator)
-var logDir = "logs"
-var logFile = logDir + "/converter.log"
+var pathSeparator = string(filepath.Separator)
+var logDir = configuration.LogDir
+var logFile = logDir + pathSeparator + configuration.LogFile
+
+func loadConfig(configFile string) *Configuration {
+	file, err := os.Open(configFile)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	decoder := json.NewDecoder(file)
+	configuration := Configuration{}
+	decodingErr := decoder.Decode(&configuration)
+	if decodingErr != nil {
+		log.Fatalln(decodingErr)
+	}
+	log.Printf("logDir: %s\n", configuration.LogDir)
+	return &configuration
+}
 
 func main() {
 	flag.Parse()
@@ -26,7 +49,7 @@ func main() {
 	if _, err := os.Stat(logDir); os.IsNotExist(err) {
 		err := os.MkdirAll(logDir, os.ModePerm)
 		if err != nil {
-			log.Fatalf("Could not create log directory\n")
+			log.Fatalf("Could not create log directory %s\n", logDir)
 		}
 	}
 	f, err := os.OpenFile(logFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
